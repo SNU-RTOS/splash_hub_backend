@@ -20,7 +20,8 @@ async def save_code(username, title, schema):
         command = "python {}/main.py --name {} --file temp.json --path {}/usr_src/{}".format(path, title, settings.BASE_DIR, username)
         process = subprocess.Popen(command.split(), cwd="usr_src/{}".format(username), stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         out, err = process.communicate()
-        
+        print(out)
+        print(err)
     except Exception:
         pass
     finally:
