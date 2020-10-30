@@ -54,11 +54,13 @@ class Schema(APIView):
         try:
             project_id = kwargs['pid']
             data = request.data['data']
+            
             project = user.project.filter(pk=project_id).first()
+            prev_schema = project.schema
             project.schema = data
             project.edited_on = datetime.now()
             project.save()
-            asyncio.run(save_code(user.username, project.name, data))
+            asyncio.run(save_code(user.username, project.name, prev_schema, data))
             return Response(status=status.HTTP_201_CREATED)
 
         except Exception as e:
