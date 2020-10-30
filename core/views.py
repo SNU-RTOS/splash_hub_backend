@@ -3,14 +3,14 @@ from django.shortcuts import render
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from .models import Project, Code
 from .serializers import ProjectSerializer, ProjectListSerializer
 from authorization.models import User
 from datetime import datetime
 import asyncio
-
+import os
 from .tasks import save_code
 class ProjectCreate(APIView):
     permission_classes = [IsAuthenticated]
@@ -93,4 +93,32 @@ class UserProjectList(APIView):
             return Response(status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
-    
+class Code(APIView):
+    permission_classes=[AllowAny]
+    def get(self, request, *args, **kwargs):
+        try:
+            project_id = kwargs['pid']
+            print(project_id)
+            file_path = kwargs['path']
+            project = Project.objects.get(id=project_id)
+            username = project.author.username
+
+            if not os.path.isdir("usr_src/{}/src/{}".format(username, project.name)) :
+                return Response(status=status.HTTP_404_BAD_REQUEST, data="No such project's file")
+            
+            file_path = file_path.replace('(', '').replace(')', '')
+            file_path = file_path.split('/')
+            print(file_path)
+            root_path = "usr_src/{}/src/{}".format(username, project.name)
+            cur_path = root_path
+            for path in file_path:
+                cur_path = '{}/{}'.format(cur_path, path)
+            
+            file_str = ''
+            with open(cur_path, 'r') as f:
+                file_str = f.read()
+            return Response(status=status.HTTP_200_OK, data=file_str)
+        except Exception as e:
+            print(str(e))
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
+        return Response(status=status.HTTP_400_BAD_REQUEST)
