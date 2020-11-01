@@ -6,40 +6,47 @@ import os
 import asyncio
 import json
 
-path = "/Users/yehyun/Desktop/Splash/splash_code_generator"
+path = settings.SPLASH_CODE_GENERATOR_PATH
 async def save_code(username, title, prev_schema, schema):
     try:
         if os.path.isdir("usr_src/{}/src/{}".format(username, title)) :
             merge_code(username, title, prev_schema, schema)
-            return
-        if not os.path.isdir("usr_src/{}".format(username)):
-            os.makedirs("usr_src/{}".format(username))
-        if not os.path.isdir("usr_src/{}/src".format(username)):
-            os.makedirs("usr_src/{}/src".format(username))
-        with open("usr_src/{}/temp.json".format(username), "w") as f:
-            f.write(schema)
-        command = "python {}/main.py --name {} --file temp.json --path {}/usr_src/{}".format(path, title, settings.BASE_DIR, username)
-        process = subprocess.Popen(command.split(), cwd="usr_src/{}".format(username), stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        out, err = process.communicate()
-        print(out)
-        print(err)
+        else:
+            generate_code(username, title, schema)
     except Exception as e:
         print("error occurs while save code: ", str(e))
     finally:
         if os.path.isfile("usr_src/{}/temp.json".format(username)):
             os.remove("usr_src/{}/temp.json".format(username))
 
+def generate_code(username, title, schema):
+    if not os.path.isdir("usr_src/{}".format(username)):
+        os.makedirs("usr_src/{}".format(username))
+    if not os.path.isdir("usr_src/{}/src".format(username)):
+        os.makedirs("usr_src/{}/src".format(username))
+    with open("usr_src/{}/temp.json".format(username), "w") as f:
+        f.write(schema)
+    command = "python {}/main.py --name {} --file temp.json --path {}/usr_src/{}".format(path, title, settings.BASE_DIR, username)
+    process = subprocess.Popen(command.split(), cwd="usr_src/{}".format(username), stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    print(out)
+    print(err)
 
 def merge_code(username, title, prev_schema, schema):
     prev_schema = json.loads(prev_schema)
     schema = json.loads(schema)
-    added, removed, modified = compare_schema(prev_schema, schema)
-    print("Added: ", added)
-    print("removed: ", removed)
-    print("modified: ", modified)
+    added_nodes, removed_nodes, modified_nodes = compare_schema_node(prev_schema, schema)
+    base_dict = {'class': 'GraphLinksModel', 'linkKeyProperty': 'key', 'nodeDataArray': [], 'linkDataArray': []}
+    added_dict = removed_dict = modified_dict = base_dict
+    
+    added_dict["nodeDataArray"] =  added_nodes
+    removed_dict["nodeDataArray"] = removed_nodes
+    
+    print("Added: ", added_nodes)
+    print("removed: ", removed_nodes)
+    print("modified: ", modified_nodes)
 
-def compare_schema(prev, new):
-
+def compare_schema_node(prev, new):
     prev_length = len(prev["nodeDataArray"])
     new_length = len(new["nodeDataArray"])
     prev_uuid = [0]*prev_length
@@ -95,11 +102,11 @@ def compare_schema(prev, new):
             removed_list2[i] = prev["nodeDataArray"][prev_uuid.index(removed_list[i])]
         #print("Removed: ", *removed_list2, sep = '\n')
 
-    modified_dict = {"Modified: ": [0]*len(modified_list)}
+    modified_list2 = []
 
     if modified_list == ["none"]:
         #print("Modified: none")
-        modified_dict = []
+        modified_list2 = []
 
     else:
         for i in range(len(modified_list)):
@@ -108,9 +115,9 @@ def compare_schema(prev, new):
             diction1 = {"UUID: ": prev["nodeDataArray"][i]["UUID"]}
             diction1["from"] = set1-set2
             diction1["to"] = set2-set1
-            modified_dict["Modified: "][i] = diction1
+            modified_list2.append(diction1)
 
     #print(modified_dict)
-    return added_list2, removed_list2, modified_dict
+    return added_list2, removed_list2, modified_list2
 
     
