@@ -98,7 +98,6 @@ class Code(APIView):
     def get(self, request, *args, **kwargs):
         try:
             project_id = kwargs['pid']
-            print(project_id)
             file_path = kwargs['path']
             project = Project.objects.get(id=project_id)
             username = project.author.username
@@ -108,7 +107,6 @@ class Code(APIView):
             
             file_path = file_path.replace('(', '').replace(')', '')
             file_path = file_path.split('/')
-            print(file_path)
             root_path = "usr_src/{}/src/{}".format(username, project.name)
             cur_path = root_path
             for path in file_path:
