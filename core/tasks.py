@@ -36,15 +36,19 @@ def merge_code(username, title, prev_schema, schema):
     prev_schema = json.loads(prev_schema)
     schema = json.loads(schema)
     added_nodes, removed_nodes, modified_nodes = compare_schema_node(prev_schema, schema)
+    added_links, removed_links, modified_links = compare_schema_link(prev_schema, schema)
     base_dict = {'class': 'GraphLinksModel', 'linkKeyProperty': 'key', 'nodeDataArray': [], 'linkDataArray': []}
     added_dict = removed_dict = modified_dict = base_dict
     
     added_dict["nodeDataArray"] =  added_nodes
     removed_dict["nodeDataArray"] = removed_nodes
     
-    print("Added: ", added_nodes)
-    print("removed: ", removed_nodes)
-    print("modified: ", modified_nodes)
+    print("Added nodes: ", added_nodes)
+    print("Removed nodes: ", removed_nodes)
+    print("Modified nodes: ", modified_nodes)
+    print("Added links: ", added_links)
+    print("Removed links: ", removed_links)
+    print("Modified links: ", modified_links)
 
 def compare_schema_node(prev, new):
     prev_length = len(prev["nodeDataArray"])
@@ -55,14 +59,12 @@ def compare_schema_node(prev, new):
     for i in range(prev_length):
         prev_uuid[i]= prev["nodeDataArray"][i]["UUID"]
 
-    new_length = len(new["nodeDataArray"])
     for i in range (new_length):
         new_uuid[i] = new["nodeDataArray"][i]["UUID"]
 
     set_prevuuid = set(prev_uuid)
     set_newuuid = set(new_uuid)
     shared = set_prevuuid.intersection(set_newuuid)
-    shared_list = list(shared)
 
     removed = set_prevuuid-set_newuuid
     if removed ==set():
@@ -87,25 +89,20 @@ def compare_schema_node(prev, new):
     modified_list3 = [0]*len(modified_list)
 
     if added_list == ["none"]:
-        #print("Added: none")
         added_list2 = []
     else:
         for i in range(len(added_list)):
             added_list2[i] = new["nodeDataArray"][new_uuid.index(added_list[i])]
-        #print("Added: ", *added_list2, sep = '\n')
 
     if removed_list == ["none"]:
-        #print("Removed: none")
         removed_list2 = []
     else:
         for i in range(len(removed_list)):
             removed_list2[i] = prev["nodeDataArray"][prev_uuid.index(removed_list[i])]
-        #print("Removed: ", *removed_list2, sep = '\n')
 
     modified_list2 = []
 
     if modified_list == ["none"]:
-        #print("Modified: none")
         modified_list2 = []
 
     else:
@@ -117,7 +114,75 @@ def compare_schema_node(prev, new):
             diction1["to"] = set2-set1
             modified_list2.append(diction1)
 
-    #print(modified_dict)
     return added_list2, removed_list2, modified_list2
 
-    
+def compare_schema_link(prev, new):
+    prev_length = len(prev["linkDataArray"])
+    new_length = len(new["linkDataArray"])
+    prev_key = [0]*prev_length
+    new_key = [0]*new_length
+
+    for i in range(prev_length):
+        prev_key[i]= prev["linkDataArray"][i]["key"]
+
+    for i in range (new_length):
+        new_key[i] = new["linkDataArray"][i]["key"]
+
+    print("prev_key", prev_key)
+    print(new_key)
+    set_prevkey = set(prev_key)
+    set_newkey = set(new_key)
+    shared = set_prevkey.intersection(set_newkey)
+
+
+    removed = set_prevkey-set_newkey
+    if removed ==set():
+        removed = {"none"}
+
+    added = set_newkey-set_prevkey
+    if added == set():
+        added = {"none"}
+
+    modified = set(a for a in shared if prev["linkDataArray"][prev_key.index(a)] != new["linkDataArray"][new_key.index(a)])
+
+    if modified ==set():
+        modified = {"none"}
+
+    added_list = list(added)
+    removed_list = list(removed)
+    modified_list = list(modified)
+    print(added_list, removed_list, modified_list)
+
+
+    added_list2 = [0]*len(added_list)
+    removed_list2 = [0]*len(removed_list)
+    modified_list2 = [0]*len(modified_list)
+    modified_list3 = [0]*len(modified_list)
+
+    if added_list == ["none"]:
+        added_list2 = []
+    else:
+        for i in range(len(added_list)):
+            added_list2[i] = new["linkDataArray"][new_key.index(added_list[i])]
+
+    if removed_list == ["none"]:
+        removed_list2 = []
+    else:
+        for i in range(len(removed_list)):
+            removed_list2[i] = prev["linkDataArray"][prev_key.index(removed_list[i])]
+
+    modified_list2 = []
+
+    if modified_list == ["none"]:
+        modified_list2 = []
+
+    else:
+        for i in range(len(modified_list)):
+            set1 = set(prev["linkDataArray"][prev_key.index(modified_list[i])].items())
+            set2 = set(new["linkDataArray"][new_key.index(modified_list[i])].items())
+            diction1 = {"key: ": prev["linkDataArray"][i]["key"]}
+            diction1["from"] = set1-set2
+            diction1["to"] = set2-set1
+            modified_list2.append(diction1)
+
+    return added_list2, removed_list2, modified_list2
