@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 from pathlib import Path
 import os
 import environ
-root = environ.Path(__file__) - 3 # three folder back (/a/b/c/ - 3 = /)
+root = environ.Path(__file__) - 1 # one folder back (/a/b/c/ - 3 = /)
 env = environ.Env(DEBUG=(bool, False),) # 기본 값
 environ.Env.read_env() # .env 파일이 있으면 읽음
 
@@ -163,3 +163,5 @@ STATIC_ROOT=os.path.join(BASE_DIR, 'staticfiles')
 
 
 BACKGROUND_TASK_RUN_ASYNC=True
+
+SPLASH_CODE_GENERATOR_PATH = env.str("SPLASH_CODE_GENERATOR_PATH", "")
