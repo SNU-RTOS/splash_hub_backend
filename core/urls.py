@@ -7,6 +7,7 @@ urlpatterns = [
     path('schema/<pid>/', Schema.as_view()),
     path('info/<pid>/', ProjectInfo.as_view()),
     path('list/<uname>/', UserProjectList.as_view()),
+    path('code/download/<pid>/', CodeDownload.as_view()),
     re_path(r'code/(?P<pid>[1-9]+)/(?P<path>.*)/$', Code.as_view(), name="file_path"),
 
 ]

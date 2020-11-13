@@ -1,5 +1,5 @@
 from django.shortcuts import render
-
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,6 +10,8 @@ from .serializers import ProjectSerializer, ProjectListSerializer
 from authorization.models import User
 from datetime import datetime
 import asyncio
+import zipfile
+
 import os
 from .tasks import save_code
 class ProjectCreate(APIView):
@@ -103,7 +105,7 @@ class Code(APIView):
             username = project.author.username
 
             if not os.path.isdir("usr_src/{}/src/{}".format(username, project.name)) :
-                return Response(status=status.HTTP_404_BAD_REQUEST, data="No such project's file")
+                return Response(status=status.HTTP_404_NOT_FOUND, data="No such project's file")
             
             file_path = file_path.replace('(', '').replace(')', '')
             file_path = file_path.split('/')
@@ -119,4 +121,32 @@ class Code(APIView):
         except Exception as e:
             print(str(e))
             return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class CodeDownload(APIView):
+    permission_classes=[AllowAny]
+    def get(self, request, *args, **kwargs):
+        try:
+            prev_dir = os.getcwd()
+            project_id = kwargs['pid']
+            project = Project.objects.get(id=project_id)
+            username = project.author.username
+
+            if not os.path.isdir("usr_src/{}/src/{}".format(username, project.name)) :
+                return Response(status=status.HTTP_404_BAD_REQUEST, data="No such project's file")
+            os.chdir("usr_src/{}/src".format(username))
+            response = HttpResponse(content_type='application/zip')
+            zf = zipfile.ZipFile(response, 'w')
+            for root, dirs, files in os.walk(project.name):
+                for file in files:
+                    zf.write(os.path.join(root, file))
+            
+            response['Content-Disposition'] = f'attachment; filename={project.name}'
+            return response
+        except Exception as e:
+            print(str(e))
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
+        finally:
+            os.chdir(prev_dir)
         return Response(status=status.HTTP_400_BAD_REQUEST)
