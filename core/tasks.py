@@ -226,3 +226,21 @@ async def build_docker_image(user, title):
     image = docker_image.build(path=f'{settings.BASE_DIR}/usr_src/{user.username}/src', tag=f'{username}_splash_{title}:0.0')
     docker_container.run(image=f'{username}_splash_{title}:0.0', init=True, tty=True, detach=True, name=f'{username}_splash_{title}', ports={'22/tcp': 11111}, volumes={f'{settings.BASE_DIR}/usr_src/{user.username}/src/{title}': {'bind': f'/root/dev_ws/src/{title}', 'mode': 'rw'}})
     os.remove(path)
+
+
+async def make_build_unit(user, title, build_unit_name):
+    path = f'usr_src/{user.username}/src/Dockerfile'
+    username = user.username.lower()
+    with open(path, 'w') as f:
+        f.write(f'FROM {username}_splash_{title}:0.0\n')
+        f.write('WORKDIR /root/dev_ws\n')
+        f.write('SHELL ["/bin/bash", "-c"]\n')
+        f.write('RUN echo \"source /opt/ros/dashing/setup.bash\" >> /root/.bashrc\n')
+        f.write(f'COPY {title} /root/dev/src/{title}\n')
+        f.write('colcon build')
+        f.write('RUN echo \"source /root/dev_ws/install/setup.bash\" >> /root/.bashrc\n')
+        f.write('CMD ros2 run {title} {build_unit_name}')
+
+    image = docker_image.build(path=f'{settings.BASE_DIR}/usr_src/{user.username}/src', tag=f'{username}_splash_{title}_{build_unit_name}:0.0')
+    docker_container.run(image=f'{username}_splash_{title}_{build_unit_name}:0.0', init=True, tty=True, detach=True, name=f'{username}_splash_{title}_{build_unit_name}')
+    os.remove(path)
