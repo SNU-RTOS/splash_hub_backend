@@ -60,7 +60,7 @@ class SchemaView(APIView):
             project_id = kwargs['pid']
             data = request.data['data']
             
-            project = user.project.filter(pk=project_id).first()
+            project = user.project.get(id=project_id)
             prev_schema = project.schema
             project.schema = data
             project.edited_on = datetime.now()
@@ -210,11 +210,30 @@ class CustomMessageFieldView(APIView):
             for field in fields_from_request:
                 MessageField(message=message, name=field['name'], package=field['package'], field_type=field['field_type']).save()
 
-            return Response(status=status.HTTP_200_OK)
+            return Response(status=status.HTTP_201_CREATED)
         except Exception as e:
             print(e)
             return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
 
+class CustomMessageFieldCreateView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def post(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            fields_from_request = json.loads(request.data['fields'])
+            name = request.data['name']
+            message = CustomMessage(user=user, name=name)
+            message.save()
+            message.fields.all().delete()
+                
+            for field in fields_from_request:
+                MessageField(message=message, name=field['name'], package=field['package'], field_type=field['field_type']).save()
+
+            return Response(status=status.HTTP_201_CREATED)
+        except Exception as e:
+            print(e)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
 
 
 class CustomMessageFieldListView(APIView):

@@ -10,6 +10,7 @@ urlpatterns = [
     path('code/download/<pid>/', CodeDownloadView.as_view()),
     re_path(r'code/(?P<pid>[1-9]+)/(?P<path>.*)/$', CodeView.as_view(), name="file_path"),
     path('custom_message/<int:id>/', CustomMessageFieldView.as_view()),
+    path('custom_message/new/', CustomMessageFieldCreateView.as_view()),
     path('custom_message/list/', CustomMessageFieldListView.as_view()),
     path('build/', BuildUnitView.as_view()),    
 ]

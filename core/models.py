@@ -10,7 +10,8 @@ class Project(models.Model):
     name = models.CharField(max_length=30)
     description = models.CharField(max_length=500)
     schema = models.TextField(null=True, blank=True)
-    
+    def __str__(self):
+        return f'\'{self.name}\' by {self.author.username}'
 class Code(models.Model):
     project = models.ForeignKey(Project, related_name="code", on_delete=models.CASCADE)
     path = models.CharField(max_length=255)
