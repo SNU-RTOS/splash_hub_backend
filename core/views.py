@@ -3,24 +3,27 @@ from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 
 from .models import Project, Code
-from .serializers import ProjectSerializer, ProjectListSerializer
+from .serializers import *
 from authorization.models import User
 from datetime import datetime
 import asyncio
 import zipfile
 
-import os
-from .tasks import save_code
-class ProjectCreate(APIView):
+import os, json
+
+from .tasks import save_code, delete_code, build_docker_image
+
+class ProjectCreateView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request, *args, **kwargs):
         try:
             author = request.user
             name = request.data['name']
             description = request.data['description']
+            description = description.replace('\n', '\\n')
             try:
                 check = Project.objects.get(author=author, name=name)
             except Project.DoesNotExist:
@@ -38,7 +41,7 @@ class ProjectCreate(APIView):
 
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
-class Schema(APIView):
+class SchemaView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
@@ -62,14 +65,16 @@ class Schema(APIView):
             project.schema = data
             project.edited_on = datetime.now()
             project.save()
-            asyncio.run(save_code(user.username, project.name, prev_schema, data))
+            asyncio.run(save_code(user, project.name, prev_schema, data))
+            asyncio.run(build_docker_image(user, project.name))
+            
             return Response(status=status.HTTP_201_CREATED)
 
         except Exception as e:
             print(str(e))
             return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
 
-class ProjectInfo(APIView):
+class ProjectInfoView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, *args, **kwargs):
         try:
@@ -83,7 +88,7 @@ class ProjectInfo(APIView):
             return Response(status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
-class UserProjectList(APIView):
+class UserProjectListView(APIView):
     def get(self, request, *args, **kwargs):
         try:
             username = kwargs['uname']
@@ -97,7 +102,7 @@ class UserProjectList(APIView):
             return Response(status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
-class Code(APIView):
+class CodeView(APIView):
     permission_classes=[AllowAny]
     def get(self, request, *args, **kwargs):
         try:
@@ -124,9 +129,31 @@ class Code(APIView):
             print(str(e))
             return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
         return Response(status=status.HTTP_400_BAD_REQUEST)
+    
+    def put(self, request, *args, **kwargs):
+        try:
+            project_id = kwargs['pid']
+            file_path = kwargs['path']
+            project = Project.objects.get(id=project_id)
+            username = project.author.username
+            
+            file_path = file_path.replace('(', '').replace(')', '')
+            file_path = file_path.split('/')
+            root_path = f"usr_src/{username}/src/{project.name}"
+            cur_path = root_path
+            for path in file_path:
+                cur_path = f'{cur_path}/{path}'
+            
+            file_str = request.data['code']   
+            with open(cur_path, 'w') as f:
+                f.write(file_str)
+            return Response(status=status.HTTP_200_OK, data=file_str)
+        except Exception as e:
+            print(str(e))
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
 
 
-class CodeDownload(APIView):
+class CodeDownloadView(APIView):
     permission_classes=[AllowAny]
     def get(self, request, *args, **kwargs):
         try:
@@ -147,8 +174,84 @@ class CodeDownload(APIView):
             response['Content-Disposition'] = f'attachment; filename={project.name}'
             return response
         except Exception as e:
-            print(str(e))
+            print(e)
             return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
         finally:
             os.chdir(prev_dir)
         return Response(status=status.HTTP_400_BAD_REQUEST)
+
+class CustomMessageFieldView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    def get(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            message_id = kwargs.get('id')
+            message = CustomMessage.objects.get(id=message_id)
+            serializer = CustomMessageFieldSerializer(message, many=False)
+            return Response(status=status.HTTP_200_OK, data=serializer.data)
+        except Exception as e:
+            print(e)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
+
+    def put(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            fields_from_request = json.loads(request.data['fields'])
+            name = request.data['name']
+            try:
+                message_id = kwargs.get('id')
+                message = CustomMessage.objects.get(id=message_id)
+                message.name = name
+            except Exception:
+                message = CustomMessage(user=user, name=name)
+            message.save()
+            message.fields.all().delete()
+                
+            for field in fields_from_request:
+                MessageField(message=message, name=field['name'], package=field['package'], field_type=field['field_type']).save()
+
+            return Response(status=status.HTTP_200_OK)
+        except Exception as e:
+            print(e)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
+
+
+
+class CustomMessageFieldListView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    def get(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            custom_messages = user.custom_messages.all()
+            serializer = CustomMessageFieldSerializer(custom_messages, many=True, read_only=True)
+
+            return Response(status=status.HTTP_200_OK, data=serializer.data)
+        except Exception as e:
+            print(e)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
+
+class BuildUnitView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            project_id = kwargs.get('pid')
+            project = Project.objects.get(id=project_id)
+            build_units = project.build_units.all()
+            serializer = BuildUnitSerializer(build_units, many=True)
+            return Response(status=status.HTTP_200_OK, data=serializer.data)
+        except Exception as e:
+            print(e)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=str(e))
+    def post(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            project_id = kwargs.get('pid')
+            project = Project.objects.get(id=project_id)
+            schema_data = project.schema
+            
+            return Response(status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            print(e)
+            return Response(stauts=status.HTTP_400_BAD_REQUEST, data=str(e))

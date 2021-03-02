@@ -2,7 +2,7 @@ from rest_framework.serializers import ModelSerializer, SerializerMethodField
 
 from django.contrib.auth import get_user_model
 
-from .models import Project 
+from .models import *
 from authorization.serializers import UserSerializer
 import os
 from datetime import datetime
@@ -27,3 +27,19 @@ class ProjectListSerializer(ModelSerializer):
     class Meta:
         model = Project
         fields = ['id', 'name', 'wrote_on', 'edited_on']
+
+class MessageFieldSerializer(ModelSerializer):
+    class Meta:
+        model = MessageField
+        fields = '__all__'
+
+class CustomMessageFieldSerializer(ModelSerializer):
+    fields = MessageFieldSerializer(many=True, read_only=True)
+    class Meta:
+        model = CustomMessage
+        fields = '__all__'
+
+class BuildUnitSerializer(ModelSerializer):
+    class Meta:
+        model = BuildUnit
+        fields = '__all__'

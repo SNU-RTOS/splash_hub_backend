@@ -5,34 +5,44 @@ import subprocess
 import os
 import asyncio
 import json
+from .models import Project
+import docker
 
 path = settings.SPLASH_CODE_GENERATOR_PATH
-async def save_code(username, title, prev_schema, schema):
+client = docker.from_env()
+docker_api = client.api
+docker_image = client.images
+docker_container = client.containers
+async def save_code(user, title, prev_schema, schema):
     try:
-        if os.path.isdir("usr_src/{}/src/{}".format(username, title)) :
-            merge_code(username, title, prev_schema, schema)
+        if os.path.isdir("usr_src/{}/src/{}".format(user.username, title)) :
+            merge_code(user.username, title, prev_schema, schema)
         else:
-            generate_code(username, title, schema)
+            generate_code(user, title, schema)
+            
     except Exception as e:
         print("error occurs while save code: ", str(e))
+        raise e
     finally:
-        if os.path.isfile("usr_src/{}/temp.json".format(username)):
-            os.remove("usr_src/{}/temp.json".format(username))
+        if os.path.isfile("usr_src/{}/temp.json".format(user.username)):
+            os.remove("usr_src/{}/temp.json".format(user.username))
 
-def generate_code(username, title, schema):
-    if not os.path.isdir("usr_src/{}".format(username)):
-        os.makedirs("usr_src/{}".format(username))
-    if not os.path.isdir("usr_src/{}/src".format(username)):
-        os.makedirs("usr_src/{}/src".format(username))
-    with open("usr_src/{}/temp.json".format(username), "w") as f:
+def generate_code(user, title, schema):
+    if not os.path.isdir("usr_src/{}/src".format(user.username)):
+        os.makedirs("usr_src/{}/src".format(user.username))
+    with open("usr_src/{}/temp.json".format(user.username), "w") as f:
         f.write(schema)
-    command = "python {}/main.py --name {} --file temp.json --path {}/usr_src/{}".format(path, title, settings.BASE_DIR, username)
-    process = subprocess.Popen(command.split(), cwd="usr_src/{}".format(username), stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    command = "python {}/main.py --name {} --file temp.json --path {}/usr_src/{} --username {} --email {}".format(path, title, settings.BASE_DIR, user.username, user.username, user.email)
+    # print(command)
+    process = subprocess.Popen(command.split(), cwd="usr_src/{}".format(user.username), stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     out, err = process.communicate()
-    print(out)
+    # print(out)
     print(err)
-
-def merge_code(username, title, prev_schema, schema):
+    if err:
+        delete_code(user, title)
+        project = Project.objects.get(title=title)
+        project.delete()
+def merge_code(user, title, prev_schema, schema):
     prev_schema = json.loads(prev_schema)
     schema = json.loads(schema)
     added_nodes, removed_nodes, modified_nodes = compare_schema_node(prev_schema, schema)
@@ -186,3 +196,33 @@ def compare_schema_link(prev, new):
             modified_list2.append(diction1)
 
     return added_list2, removed_list2, modified_list2
+
+def delete_code(user, title):
+    os.rmdir("usr_src/{}/src/{}".format(user.username, title))
+
+async def build_docker_image(user, title):
+    path = f'usr_src/{user.username}/src/Dockerfile'
+    username = user.username.lower()
+    with open(path, 'w') as f:
+        f.write('FROM splash_environment:0.0\n')
+        # f.write(f'COPY {title} /root/dev_ws/src/{title}\n')
+        f.write('WORKDIR /root/dev_ws\n')
+        f.write('SHELL ["/bin/bash", "-c"]\n')
+        f.write('RUN echo \"source /opt/ros/dashing/setup.bash\" >> /root/.bashrc\n')
+        # f.write('RUN colcon build\n')
+        # f.write('RUN echo \"source /root/dev_ws/install/setup.bash\" >> /root/.bashrc\n')
+        f.write('RUN apt update\n')
+        f.write('RUN apt install -y openssh-server\n')
+        f.write('RUN mkdir /var/run/sshd\n')
+        f.write('RUN echo \'root:root\' | chpasswd\n')
+        f.write('RUN sed -ri \'s/^#?PermitRootLogin\s+.*/PermitRootLogin yes/\' /etc/ssh/sshd_config\n')
+        f.write('RUN sed -ri \'s/UsePAM yes/#UsePAM yes/g\' /etc/ssh/sshd_config\n')
+        f.write('RUN mkdir /root/.ssh\n')
+        f.write('RUN echo \"cd /root/dev_ws\" >> /root/.bashrc\n')
+        f.write('RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*\n')
+        f.write('EXPOSE 22\n')
+        f.write('CMD [\"/usr/sbin/sshd\", \"-D\"]\n')
+
+    image = docker_image.build(path=f'{settings.BASE_DIR}/usr_src/{user.username}/src', tag=f'{username}_splash_{title}:0.0')
+    docker_container.run(image=f'{username}_splash_{title}:0.0', init=True, tty=True, detach=True, name=f'{username}_splash_{title}', ports={'22/tcp': 11111}, volumes={f'{settings.BASE_DIR}/usr_src/{user.username}/src/{title}': {'bind': f'/root/dev_ws/src/{title}', 'mode': 'rw'}})
+    os.remove(path)
